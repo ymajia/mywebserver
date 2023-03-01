@@ -1,0 +1,26 @@
+#include <stdio.h>
+#include <unistd.h>
+#include "threadpool.h"
+
+class MyTask
+{
+public:
+    MyTask() = default;
+    void run()
+    {
+        printf("thread [%lu] is running!\n", pthread_self());
+        sleep(1);
+    }
+};
+
+int main()
+{
+    MyTask taskObj;
+    ThreadPool<MyTask> threadpool(8);
+    for (int i = 0; i < 20; i++)
+    {
+        threadpool.append(&taskObj);
+    }
+
+    return 0;
+}

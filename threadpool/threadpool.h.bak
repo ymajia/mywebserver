@@ -1,0 +1,135 @@
+#ifndef THREADPOOL_H
+#define THREADPOOL_H
+
+#include <pthread.h>
+#include <deque>
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <string>
+#include <../err_handle.h>
+
+template <typename T>
+class ThreadPool
+{
+public:
+    ThreadPool(int threadsNum = 8, int tasksNum = 10000);
+    ~ThreadPool();
+
+    bool append(T *task);
+    T *take();
+
+private:
+    // 工作线程运行的函数，不断从任务队列里取出任务并执行
+    static void *worker(void *arg);
+
+private:
+    volatile bool isRunning_;
+    int threadsNum_;            // 最大线程数
+    int tasksNum_;              // 任务队列的最大容量
+
+    pthread_t *threads_;        // 线程数组
+    std::deque<T *> taskQueue_; // 任务队列
+    pthread_mutex_t mutex_;     // 任务队列互斥量
+    pthread_cond_t cond_;       // 任务队列条件变量
+};
+
+template <typename T>
+ThreadPool<T>::ThreadPool(int threadsNum, int tasksNum)
+        : threadsNum_(threadsNum)
+        , tasksNum_(tasksNum)
+        , isRunning_(true)
+{
+    if (threadsNum <= 0 || tasksNum <= 0)
+        err_handle("threadsNum or tasksNum less 1!");
+    
+    pthread_mutex_init(&mutex_, NULL);      // init互斥量
+    pthread_cond_init(&cond_, NULL);        // init条件变量
+    threads_ = new pthread_t[threadsNum];   // 创建线程数组
+
+    if (!threads_)
+        err_handle("init threads failed!");
+
+    for (int i = 0; i < threadsNum; i++)
+    {
+        if (pthread_create(threads_ + i, NULL, worker, this) != 0)
+        {
+            delete[] threads_;
+            err_handle("pthread_create failed!");
+        }
+
+        // 设置线程分离
+        if (pthread_detach(threads_[i]))
+        {
+            delete[] threads_;
+            err_handle("pthread_detach failed!");
+        }
+    }
+}
+
+template <typename T>
+ThreadPool<T>::~ThreadPool()
+{
+    pthread_cond_broadcast(&cond_);
+    delete[] threads_;
+    pthread_mutex_destroy(&mutex_);
+    pthread_cond_destroy(&cond_);
+}
+
+template <typename T>
+bool ThreadPool<T>::append(T *task)
+{
+    pthread_mutex_lock(&mutex_);
+    if (taskQueue_.size() >= tasksNum_)
+    {
+        printf("task full!");
+        pthread_mutex_unlock(&mutex_);
+        return false;
+    }
+    taskQueue_.push_back(task);
+    pthread_mutex_unlock(&mutex_);
+    pthread_cond_signal(&cond_);
+    return true;
+}
+
+template <typename T>
+T *ThreadPool<T>::take()
+{
+    T *task = NULL;
+    pthread_mutex_lock(&mutex_);
+    while (isRunning_ && taskQueue_.empty())
+        pthread_cond_wait(&cond_, &mutex_);
+
+    if (!isRunning_)
+    {
+        pthread_mutex_unlock(&mutex_);
+        return task;
+    }
+
+    assert(!taskQueue_.empty());
+    task = taskQueue_.front();
+    taskQueue_.pop_front();
+    pthread_mutex_unlock(&mutex_);
+    return task;
+}
+
+template <typename T>
+void *ThreadPool<T>::worker(void *arg)
+{
+    pthread_t tid = pthread_self();
+    ThreadPool *pool = static_cast<ThreadPool *>(arg);
+    while (pool->isRunning_)
+    {
+        T *task = pool->take();
+        if (!task)
+        {
+            printf("thread %lu will exit!\n", tid);
+            break;
+        }
+        assert(task);
+        task->run();
+    }
+    return 0;
+}
+
+#endif

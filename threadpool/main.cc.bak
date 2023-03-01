@@ -1,0 +1,78 @@
+#include <iostream>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include "threadpool03.h"
+// #include "threadpool98.h"
+
+// class MyTask: public Task
+// {
+// public:
+//     MyTask() {}
+//     virtual int run()
+//     {
+//         printf("thread[%lu]: %s\n", pthread_self(), (char *)this->arg_);
+//         sleep(1);
+//         return 0;
+//     }
+// };
+
+class MyTask2
+{
+public:
+    MyTask2() {}
+    int run(int i, const char *p)
+    {
+        printf("thread[%lu]: (%d, %s)\n", pthread_self(), i, (char *)p);
+        sleep(1);
+        return 0;
+    }
+};
+
+int main()
+{
+    // char szTmp[] = "hello world";
+    // MyTask taskObj;
+    // taskObj.setArg((void *)szTmp);
+
+    // ThreadPool threadPool(10);
+    // for (int i = 0; i < 20; i++)
+    // {
+    //     threadPool.addTask(&taskObj);
+    // }
+
+    // while (1)
+    // {
+    //     printf("there are still %d tasks need to process\n", threadPool.size());
+    //     if (threadPool.size() == 0)
+    //     {
+    //         threadPool.stop();
+    //         printf("Now I will exit from main\n");
+    //         exit(0);
+    //     }
+    //     sleep(2);
+    // }
+    
+    // exit(0);
+    
+    ThreadPool threadPool(10);
+    MyTask2 taskObj[20];
+    for (int i = 0; i < 20; i++)
+    {
+        threadPool.addTask(std::bind(&MyTask2::run, &taskObj[i], i, "hello world"));
+    }
+
+    while (1)
+    {
+        printf("there are still %d tasks need to process\n", threadPool.size());
+        if (threadPool.size() == 0)
+        {
+            threadPool.stop();
+            printf("Now I will exit from main\n");
+            exit(0);
+        }
+        sleep(2);
+    }
+    exit(0);
+}
