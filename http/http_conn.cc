@@ -21,13 +21,15 @@ HttpConn::~HttpConn()
 
 void HttpConn::init(int sockfd, const sockaddr_in &addr)
 {
-    assert(sockfd > 0);   
+    assert(sockfd > 0);
     userCount++;
     sockfd_ = sockfd;
     addr_ = addr;
     isClose_ = false;
     bzero(readBuf_, ReadBufferSize);
     bzero(writeBuf_, WriteBufferSize);
+    readLen_ = 0;
+    writeLen_ = 0;
 }
 
 int HttpConn::read()

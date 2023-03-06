@@ -1,9 +1,11 @@
 #include "threadpool03.h"
 
 ThreadPool::ThreadPool(int threadsNum)
+        : mutex_()
+        , cond_(mutex_)
+        , isRunning_(true)
+        , threadsNum_(threadsNum)
 {
-    isRunning_ = true;
-    threadsNum_ = threadsNum;
     createThreads();
 }
 
@@ -14,8 +16,8 @@ ThreadPool::~ThreadPool()
 
 int ThreadPool::createThreads()
 {
-    pthread_mutex_init(&mutex_, NULL);
-    pthread_cond_init(&condition_, NULL);
+    // pthread_mutex_init(&mutex_, NULL);
+    // pthread_cond_init(&condition_, NULL);
     threads_ = (pthread_t *)malloc(sizeof(pthread_t) * threadsNum_);
     for (int i = 0; i < threadsNum_; i++)
     {
@@ -28,11 +30,13 @@ int ThreadPool::createThreads()
 
 size_t ThreadPool::addTask(const Task &task)
 {
-    pthread_mutex_lock(&mutex_);
+    // pthread_mutex_lock(&mutex_);
+    MutexLockGuard lock(mutex_);
     taskQueue_.push_back(task);
     size_t size = taskQueue_.size();
-    pthread_mutex_unlock(&mutex_);
-    pthread_cond_signal(&condition_);
+    // pthread_mutex_unlock(&mutex_);
+    // pthread_cond_signal(&condition_);
+    cond_.notify();
     return size;
 }
 
@@ -41,7 +45,8 @@ void ThreadPool::stop()
     if (!isRunning_) return;
 
     isRunning_ = false;
-    pthread_cond_broadcast(&condition_);
+    // pthread_cond_broadcast(&condition_);
+    cond_.notifyAll();
 
     for (int i = 0; i < threadsNum_; i++)
     {
@@ -51,37 +56,40 @@ void ThreadPool::stop()
     free(threads_);
     threads_ = NULL;
 
-    pthread_mutex_destroy(&mutex_);
-    pthread_cond_destroy(&condition_);
+    // pthread_mutex_destroy(&mutex_);
+    // pthread_cond_destroy(&condition_);
 }
 
 int ThreadPool::size()
 {
-    pthread_mutex_lock(&mutex_);
+    // pthread_mutex_lock(&mutex_);
+    MutexLockGuard lock(mutex_);
     size_t size = taskQueue_.size();
-    pthread_mutex_unlock(&mutex_);
+    // pthread_mutex_unlock(&mutex_);
     return size;
 }
 
 ThreadPool::Task ThreadPool::take()
 {
     Task task = NULL;
-    pthread_mutex_lock(&mutex_);
+    // pthread_mutex_lock(&mutex_);
+    MutexLockGuard lock(mutex_);
     while (taskQueue_.empty() && isRunning_)
     {
-        pthread_cond_wait(&condition_, &mutex_);
+        // pthread_cond_wait(&condition_, &mutex_);
+        cond_.wait();
     }
 
     if (!isRunning_)
     {
-        pthread_mutex_unlock(&mutex_);
+        // pthread_mutex_unlock(&mutex_);
         return task;
     }
 
     assert(!taskQueue_.empty());
     task = taskQueue_.front();
     taskQueue_.pop_front();
-    pthread_mutex_unlock(&mutex_);
+    // pthread_mutex_unlock(&mutex_);
     return task;
 }
 

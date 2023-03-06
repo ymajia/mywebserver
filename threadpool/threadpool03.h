@@ -5,6 +5,8 @@
 #include <pthread.h>
 #include <functional>
 #include <assert.h>
+#include "../locker/mutex_lock_guard.h"
+#include "../locker/condition.h"
 
 class ThreadPool
 {
@@ -34,8 +36,10 @@ private:
     pthread_t *threads_;
     
     std::deque<Task> taskQueue_;
-    pthread_mutex_t mutex_;
-    pthread_cond_t condition_;
+    // pthread_mutex_t mutex_;
+    // pthread_cond_t condition_;
+    MutexLock mutex_;
+    Condition cond_;
 };
 
 #endif

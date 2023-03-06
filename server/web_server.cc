@@ -99,6 +99,8 @@ void WebServer::eventLoop()
             // 获取堆中下一次超时的时间
             timeMs = timer_->getNextTick();
         }
+        printf("timeMs: %d\n", timeMs);
+        fflush(stdout);
         int eventCnt = epoller_->wait(timeMs);
         for (int i = 0; i < eventCnt; i++)
         {
@@ -114,9 +116,24 @@ void WebServer::eventLoop()
 
                 dealListen();
             }
-            else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
+            else if (events & EPOLLRDHUP)
             {
                 /* 处理错误 */
+                printf("EPOLLRDHUP, sockfd: %d\n", fd);
+                fflush(stdout);
+                closeConn(&userHttp_[fd]);
+            }
+            else if (events & EPOLLHUP)
+            {
+                printf("EPOLLHUP, sockfd: %d\n", fd);
+                fflush(stdout);
+                closeConn(&userHttp_[fd]);
+            }
+            else if (events & EPOLLERR)
+            {
+                printf("EPOLLERR, sockfd: %d\n", fd);
+                fflush(stdout);
+                closeConn(&userHttp_[fd]);
             }
             else if (events & EPOLLIN)
             {
@@ -144,19 +161,18 @@ void WebServer::dealListen()
 {
     struct sockaddr_in cliAddr;
     socklen_t len = sizeof(cliAddr);
-    do
+    int acceptFd = -1;
+    while ((acceptFd = accept(listenfd_, (struct sockaddr *)&cliAddr, &len)) > 0)
     {
-        int acceptFd = accept(listenfd_, (struct sockaddr *)&cliAddr, &len);
-        if (acceptFd < 0)
-        {
-            // 没有新连接了
-            return;
-        }
-        else if (HttpConn::userCount >= MaxFd)
+        if (HttpConn::userCount >= MaxFd)
         {
             printf("clients is full");
+            fflush(stdout);
             return;
         }
+
+        printf("accepted a new client, fd = %d\n", acceptFd);
+        fflush(stdout);
 
         // Add Client
         // 在userHttp的map中加入acceptFd到cliAddr的映射
@@ -167,11 +183,54 @@ void WebServer::dealListen()
             timer_->add(acceptFd, timeoutMs_, std::bind(&WebServer::closeConn, this, &userHttp_[acceptFd]));
         }
         // 监听acceptFd的读事件
-        epoller_->addFd(acceptFd, EPOLLIN | EPOLLONESHOT | EPOLLRDHUP | EPOLLET);
+        bool ret = epoller_->addFd(acceptFd, EPOLLIN | EPOLLONESHOT | EPOLLRDHUP | EPOLLET);
+        if (ret == false)
+        {
+            printf("epoll addFd failed!\n");
+            fflush(stdout);
+            exit(1);
+        }
         // 设置非阻塞
         setnonblocking(acceptFd);
+    }
+    // do
+    // {
+    //     int acceptFd = accept(listenfd_, (struct sockaddr *)&cliAddr, &len);
+    //     if (acceptFd < 0)
+    //     {
+    //         // 没有新连接了
+    //         return;
+    //     }
+    //     else if (HttpConn::userCount >= MaxFd)
+    //     {
+    //         printf("clients is full");
+    //         fflush(stdout);
+    //         return;
+    //     }
 
-    } while (listenfd_ & EPOLLET);
+    //     printf("accepted a new client, fd = %d\n", acceptFd);
+    //     fflush(stdout);
+
+    //     // Add Client
+    //     // 在userHttp的map中加入acceptFd到cliAddr的映射
+    //     userHttp_[acceptFd].init(acceptFd, cliAddr);
+    //     // 若设置了超时事件，加入timer堆中
+    //     if (timeoutMs_ > 0)
+    //     {
+    //         timer_->add(acceptFd, timeoutMs_, std::bind(&WebServer::closeConn, this, &userHttp_[acceptFd]));
+    //     }
+    //     // 监听acceptFd的读事件
+    //     bool ret = epoller_->addFd(acceptFd, EPOLLIN | EPOLLONESHOT | EPOLLRDHUP | EPOLLET);
+    //     if (ret == false)
+    //     {
+    //         printf("epoll addFd failed!\n");
+    //         fflush(stdout);
+    //         exit(1);
+    //     }
+    //     // 设置非阻塞
+    //     setnonblocking(acceptFd);
+
+    // } while (listenEvent_ & EPOLLET);
 }
 
 // void WebServer::dealRead(int sockfd)

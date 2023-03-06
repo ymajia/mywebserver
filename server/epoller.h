@@ -22,7 +22,6 @@ public:
     int getEventFd(size_t i) const;
     uint32_t getEvents(size_t i) const;
 
-
 private:
     int epollFd_;
     std::vector<struct epoll_event> events_;
